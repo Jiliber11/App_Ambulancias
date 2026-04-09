@@ -1,59 +1,78 @@
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
-import 'react-native-reanimated';
+// app/_layout.tsx
+// Layout raíz: decide a dónde mandar al usuario según su estado de autenticación.
+// Flujo:
+//   Sin sesión            → (auth)/login
+//   Con sesión, sin perfil → (auth)/onboarding
+//   Con sesión, con perfil → (app)/
 
-import { useColorScheme } from '@/components/useColorScheme';
+import { Stack, useRouter, useSegments } from "expo-router";
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
 
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
-
-export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: '(tabs)',
-};
-
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [loaded, error] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-    ...FontAwesome.font,
-  });
+  const [session, setSession] = useState(null);
+  // undefined = todavía cargando | null = no tiene perfil | string = rol del usuario
+  const [role, setRole] = useState<string | null | undefined>(undefined);
+  const router = useRouter();
+  const segments = useSegments();
 
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
-  useEffect(() => {
-    if (error) throw error;
-  }, [error]);
-
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
+  // Carga el perfil del usuario desde la tabla profiles
+  async function cargarPerfil(userId: string) {
+    try {
+      const { data } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", userId)
+        .single();
+      setRole(data?.role ?? null);
+    } catch {
+      // Si la tabla no existe todavía (credenciales placeholder), tratamos como sin perfil
+      setRole(null);
     }
-  }, [loaded]);
-
-  if (!loaded) {
-    return null;
   }
 
-  return <RootLayoutNav />;
-}
+  useEffect(() => {
+    // Verificamos si hay una sesión guardada al arrancar
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) cargarPerfil(session.user.id);
+      else setRole(null);
+    });
 
-function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+    // Escuchamos cambios de auth (login, logout, token renovado)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) cargarPerfil(session.user.id);
+      else setRole(null);
+    });
 
-  return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-      </Stack>
-    </ThemeProvider>
-  );
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Redirigimos cada vez que cambia la sesión o el rol
+  useEffect(() => {
+    // Mientras cargamos, no hacemos nada
+    if (role === undefined) return;
+
+    const enAuth = (segments[0] as string) === "(auth)";
+
+    if (!session) {
+      // No autenticado → login
+      if (!enAuth) router.replace("/(auth)/login" as any);
+    } else if (!role) {
+      // Autenticado pero sin rol elegido → onboarding
+      router.replace("/(auth)/onboarding" as any);
+    } else {
+      // Autenticado con rol → app principal
+      if (enAuth) router.replace("/(app)/" as any);
+    }
+  }, [session, role]);
+
+  // Mientras verificamos, no renderizamos nada (evita flash de pantalla incorrecta)
+  if (role === undefined) return null;
+
+  return <Stack screenOptions={{ headerShown: false }} />;
 }

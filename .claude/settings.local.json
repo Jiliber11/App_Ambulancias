@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C c:/Proyects/ambulancias-app worktree remove --force .claude/worktrees/peaceful-bohr)",
+      "Bash(rm -rf c:/Proyects/ambulancias-app/.claude/worktrees/peaceful-bohr)",
+      "Bash(git -C c:/Proyects/ambulancias-app worktree prune)",
+      "WebFetch(domain:mzxxdeglootkxmzblilm.supabase.co)",
+      "Bash(__NEW_LINE_b6089a6bcdc087bd__ KEY=\"sb_publishable_vsT8bGRxvL6c6j8ReMjFxg_-aomO0_A\" curl -s -H \"apikey: $KEY\" -H \"Authorization: Bearer $KEY\" \"https://mzxxdeglootkxmzblilm.supabase.co/rest/v1/\")",
+      "Bash(python3 -m json.tool)"
+    ]
+  }
+}
